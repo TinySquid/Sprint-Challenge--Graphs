@@ -6,6 +6,8 @@ import random
 from ast import literal_eval
 from util import Queue, Stack
 
+import multiprocessing
+
 # Load world
 world = World()
 
@@ -132,7 +134,7 @@ def traverse_maze(test=True):
         return len(traversal_path)
 
 
-def get_lowest_steps(iterations, progress_step):
+def thread_find_lowest_steps(worker, iterations, progress_step, work_result):
     step_container = []
     percent_complete = 0
     progress_print_at_value = iterations * (progress_step / 100)
@@ -140,24 +142,64 @@ def get_lowest_steps(iterations, progress_step):
     print("Starting run...")
 
     for i in range(0, iterations):
+        # Print progress at each progress_step
         if i != 0 and i % progress_print_at_value == 0:
             percent_complete += progress_step
 
+            # Get current minimum
             min_so_far = min(step_container)
+            # Dump old runs
             step_container.clear()
+            # Add calculated min
             step_container.append(min_so_far)
 
             print(
-                "Progress...",
-                percent_complete,
-                " Lowest step count so far: ",
-                min_so_far,
+                f"Worker: {worker} Progress... {percent_complete}% Shortest traversal so far: {min_so_far}"
             )
-
+        # Traverse maze and append result to steps
         step_container.append(traverse_maze(False))
 
+    # Get final min
+    shortest_traversal = min(step_container)
+
     print("\n...Run complete")
-    print("Lowest steps to solve: ", min(step_container))
+    print("Lowest steps to solve: ", shortest_traversal)
+
+    work_result[worker] = shortest_traversal
+
+
+def find_lowest_steps(iterations, step, use_all_cores=False):
+
+    if use_all_cores:
+        # List to hold our child processes
+        processes = []
+        # Core count of this machine
+        cpu_count = multiprocessing.cpu_count() - 1
+        # Setup shared array so we can get the final result of each process
+        work_result = multiprocessing.Array("i", cpu_count)
+
+        for i in range(0, cpu_count):
+            # Create process
+            child_process = multiprocessing.Process(
+                target=thread_find_lowest_steps,
+                args=(i, iterations, step, work_result,),
+            )
+            # Start working
+            child_process.start()
+            # Print PID of new worker
+            print(f"Worker {i} started with pid of {child_process.pid}")
+            # Add to tracking list
+            processes.append(child_process)
+
+        # Join them all back to the main process here
+        for process in processes:
+            process.join()
+
+        # Print minimum path found out of all workers
+        print("\n\n...Shortest traversal out of all workers: ", min(work_result))
+
+    else:
+        thread_find_lowest_steps(0, iterations, step, [None])
 
 
 def traversal_test():
@@ -180,27 +222,30 @@ def traversal_test():
         print(f"{len(room_graph) - len(visited_rooms)} unvisited rooms")
 
 
-# ************************************************#
-# ORIGINAL TEST DRIVER CODE
-traversal_test()
+if __name__ == "__main__":
+    # ************************************************#
+    # ORIGINAL TEST DRIVER CODE
+    # traversal_test()
 
-# ************************************************#
-# FIND LOWEST STEP IN X ITERATIONS
-iterations = 10000  # How many tries to we want to do
-print_at_percent_value = 10  # Print progress at N percent (1-100)
-# get_lowest_steps(iterations, print_at_percent_value)
+    # ************************************************#
+    # FIND LOWEST STEP IN X ITERATIONS
+    iterations = 5000  # How many tries to we want to do
+    percent_notify = 10  # Print progress at N percent (1-100)
+    # Will only use cpu core count - 1 if use_all_cores is True
+    # Otherwise it will only run on the main thread
+    find_lowest_steps(iterations=iterations, step=percent_notify, use_all_cores=False)
 
-# Shortest steps recorded: 972
+    # Shortest steps recorded: 972
 
-#######
-# UNCOMMENT TO WALK AROUND
-#######
-# player.current_room.print_room_description(player)
-# while True:
-#     cmds = input("-> ").lower().split(" ")
-#     if cmds[0] in ["n", "s", "e", "w"]:
-#         player.travel(cmds[0], True)
-#     elif cmds[0] == "q":
-#         break
-#     else:
-#         print("I did not understand that command.")
+    #######
+    # UNCOMMENT TO WALK AROUND
+    #######
+    # player.current_room.print_room_description(player)
+    # while True:
+    #     cmds = input("-> ").lower().split(" ")
+    #     if cmds[0] in ["n", "s", "e", "w"]:
+    #         player.travel(cmds[0], True)
+    #     elif cmds[0] == "q":
+    #         break
+    #     else:
+    #         print("I did not understand that command.")
