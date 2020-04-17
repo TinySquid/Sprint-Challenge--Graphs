@@ -22,7 +22,7 @@ room_graph = literal_eval(open(map_file, "r").read())
 world.load_graph(room_graph)
 
 # Print an ASCII map
-world.print_rooms()
+# world.print_rooms()
 
 player = Player(world.starting_room)
 
@@ -71,75 +71,126 @@ room IS visited (built and ready)
 # print(player.current_room.id)
 # print(player.current_room.get_exits())
 # print(player.travel("n"))
+def traverse_maze(test=True):
+    # Holds our end NSWE steps journey
+    traversal_path = []
+    # Reverse of traversal_path
+    reversed_traversal_path = []
+    # Dict for rooms visited
+    visited = {}
 
-# Holds our end NSWE steps journey
-traversal_path = []
-# Reverse of traversal_path
-reversed_traversal_path = []
-# Dict for rooms visited
-visited = {}
+    # Handy dict for getting opposite direction just travelled
+    from_dir = {"n": "s", "s": "n", "w": "e", "e": "w"}
 
-# Handy dict for getting opposite direction just travelled
-from_dir = {"n": "s", "s": "n", "w": "e", "e": "w"}
+    # Build starting room and exits
+    visited[player.current_room.id] = player.current_room.get_exits()
 
-# Build starting room and exits
-visited[player.current_room.id] = player.current_room.get_exits()
+    # We know were done when we have visited all rooms in room_graph
+    while len(visited) < len(room_graph):
 
-# We know were done when we have visited all rooms in room_graph
-while len(visited) < len(room_graph):
+        # Unvisited room case
+        if player.current_room.id not in visited:
+            # Get room exits
+            exits = player.current_room.get_exits()
+            # Remove the path we just came from (direction is reversed)
+            exits.remove(from_dir[traversal_path[-1]])
+            # Add room and exits to visited
+            visited[player.current_room.id] = exits
 
-    # Unvisited room case
-    if player.current_room.id not in visited:
-        # Get room exits
-        exits = player.current_room.get_exits()
-        # Remove the path we just came from (direction is reversed)
-        exits.remove(from_dir[traversal_path[-1]])
-        # Add room and exits to visited
-        visited[player.current_room.id] = exits
+        # Dead end / no more paths case
+        # Need to backtrack from here to previous room
+        if len(visited[player.current_room.id]) == 0:
+            # Since we are going back to previous room,
+            # we need to add this action as a step in the
+            # traversal path
+            # Get last step
+            last_step_direction = reversed_traversal_path.pop()
 
-    # Dead end / no more paths case
-    # Need to backtrack from here to previous room
-    if len(visited[player.current_room.id]) == 0:
-        # Since we are going back to previous room,
-        # we need to add this action as a step in the
-        # traversal path
-        # Get last step
-        last_step_direction = reversed_traversal_path.pop()
+            # Add to our path
+            traversal_path.append(last_step_direction)
+            # Move player to previous room
+            player.travel(last_step_direction)
 
-        # Add to our path
-        traversal_path.append(last_step_direction)
-        # Move player to previous room
-        player.travel(last_step_direction)
-
+        else:
+            # Pick last available direction
+            direction_choices = len(visited[player.current_room.id])
+            direction_index = (
+                random.randint(0, direction_choices - 1) if direction_choices > 0 else 0
+            )
+            direction = visited[player.current_room.id][direction_index]
+            # Remove from choices so we don't travel down this path again
+            visited[player.current_room.id].pop(direction_index)
+            # Move player to next room
+            player.travel(direction)
+            # Add to path tracker
+            traversal_path.append(direction)
+            # Add inverse of direction to reversed_path
+            reversed_traversal_path.append(from_dir[direction])
+    if test:
+        return traversal_path
     else:
-        # Pick last available direction
-        direction = visited[player.current_room.id][-1]
-        # Remove from choices so we don't travel down this path again
-        visited[player.current_room.id].pop()
-        # Move player to next room
-        player.travel(direction)
-        # Add to path tracker
-        traversal_path.append(direction)
-        # Add inverse of direction to reversed_path
-        reversed_traversal_path.append(from_dir[direction])
+        return len(traversal_path)
 
-# TRAVERSAL TEST
-visited_rooms = set()
-player.current_room = world.starting_room
-visited_rooms.add(player.current_room)
 
-for move in traversal_path:
-    player.travel(move)
+def get_lowest_steps(iterations, progress_step):
+    step_container = []
+    percent_complete = 0
+    progress_print_at_value = iterations * (progress_step / 100)
+
+    print("Starting run...")
+
+    for i in range(0, iterations):
+        if i != 0 and i % progress_print_at_value == 0:
+            percent_complete += progress_step
+
+            min_so_far = min(step_container)
+            step_container.clear()
+            step_container.append(min_so_far)
+
+            print(
+                "Progress...",
+                percent_complete,
+                " Lowest step count so far: ",
+                min_so_far,
+            )
+
+        step_container.append(traverse_maze(False))
+
+    print("\n...Run complete")
+    print("Lowest steps to solve: ", min(step_container))
+
+
+def traversal_test():
+    # TRAVERSAL TEST
+    visited_rooms = set()
+    traversal_path = traverse_maze()
+    player.current_room = world.starting_room
     visited_rooms.add(player.current_room)
 
-if len(visited_rooms) == len(room_graph):
-    print(
-        f"TESTS PASSED: {len(traversal_path)} moves, {len(visited_rooms)} rooms visited"
-    )
-else:
-    print("TESTS FAILED: INCOMPLETE TRAVERSAL")
-    print(f"{len(room_graph) - len(visited_rooms)} unvisited rooms")
+    for move in traversal_path:
+        player.travel(move)
+        visited_rooms.add(player.current_room)
 
+    if len(visited_rooms) == len(room_graph):
+        print(
+            f"TESTS PASSED: {len(traversal_path)} moves, {len(visited_rooms)} rooms visited"
+        )
+    else:
+        print("TESTS FAILED: INCOMPLETE TRAVERSAL")
+        print(f"{len(room_graph) - len(visited_rooms)} unvisited rooms")
+
+
+# ************************************************#
+# ORIGINAL TEST DRIVER CODE
+traversal_test()
+
+# ************************************************#
+# FIND LOWEST STEP IN X ITERATIONS
+iterations = 10000  # How many tries to we want to do
+print_at_percent_value = 10  # Print progress at N percent (1-100)
+# get_lowest_steps(iterations, print_at_percent_value)
+
+# Shortest steps recorded: 972
 
 #######
 # UNCOMMENT TO WALK AROUND
